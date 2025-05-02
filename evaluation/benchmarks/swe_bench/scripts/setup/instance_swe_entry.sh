@@ -30,14 +30,14 @@ else
     mkdir /workspace
 fi
 # Copy repo to workspace
-if [ -d /workspace/$WORKSPACE_NAME ]; then
-    rm -rf /workspace/$WORKSPACE_NAME
+if [ -d /workspace/$SWE_INSTANCE_ID ]; then
+    rm -rf /workspace/$SWE_INSTANCE_ID
 fi
 mkdir -p /workspace
-cp -r /testbed /workspace/$WORKSPACE_NAME
+cp -r /testbed /workspace/$SWE_INSTANCE_ID
 
 # Activate instance-specific environment
-if [ -d /opt/miniconda3 ]; then
-    . /opt/miniconda3/etc/profile.d/conda.sh
-    conda activate testbed
-fi
+# if [ -d /opt/miniconda3 ]; then
+#     . /opt/miniconda3/etc/profile.d/conda.sh
+#     conda activate testbed
+# fi

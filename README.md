@@ -21,6 +21,15 @@
   <hr>
 </div>
 
+## Run on SWE-Bench-Live
+
+```shell
+./evaluation/benchmarks/swe_bench/scripts/run_infer.sh [model_config] [git-version] [agent] [eval_limit] [max_iter] [num_workers] [dataset] [dataset_split]
+
+# test
+./evaluation/benchmarks/swe_bench/scripts/run_infer.sh llm.openai HEAD CodeActAgent 1 60 3 test.jsonl train
+```
+
 Welcome to OpenHands (formerly OpenDevin), a platform for software development agents powered by AI.
 
 OpenHands agents can do anything a human developer can: modify code, run commands, browse the web,

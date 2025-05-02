@@ -287,7 +287,11 @@ def update_progress(
     logger.info(
         f'Finished evaluation for instance {result.instance_id}: {str(result.test_result)[:300]}...\n'
     )
-    output_fp.write(result.model_dump_json() + '\n')
+    result_dict = {
+        "instance_id": result.instance_id,
+        "patch": result.test_result["git_patch"],
+    }
+    output_fp.write(json.dumps(result_dict) + "\n")
     output_fp.flush()
 
 

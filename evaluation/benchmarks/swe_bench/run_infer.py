@@ -69,7 +69,7 @@ AGENT_CLS_TO_FAKE_USER_RESPONSE_FN = {
 
 
 def _get_swebench_workspace_dir_name(instance: pd.Series) -> str:
-    return f'{instance.repo}__{instance.version}'.replace('/', '__')
+    return instance.instance_id
 
 
 def get_instruction(instance: pd.Series, metadata: EvalMetadata) -> MessageAction:
@@ -204,7 +204,7 @@ def get_instance_docker_image(
         # swebench/sweb.eval.x86_64.django_1776_django-11333:v1
         docker_image_prefix = 'docker.io/swebench/'
         repo, name = instance_id.split('__')
-        image_name = f'swebench/sweb.eval.x86_64.{repo}_1776_{name}:latest'.lower()
+        image_name = f'starryzhang/sweb.eval.x86_64.{repo}_1776_{name}:latest'.lower()
         logger.debug(f'Using official SWE-Bench image: {image_name}')
         return image_name
     else:
@@ -326,7 +326,16 @@ def initialize_runtime(
         # Write to the file with the desired name within the temporary directory
         with open(temp_file_path, 'w') as f:
             if not isinstance(instance, dict):
-                json.dump([instance.to_dict()], f)
+                instance_dict = instance.to_dict()
+                import numpy as np
+                import pandas as pd
+                for k, v in instance_dict.items():
+                    if isinstance(v, np.ndarray):
+                        instance_dict[k] = v.tolist()
+                    elif isinstance(v, pd.Timestamp):
+                        instance_dict[k] = str(v)
+                
+                json.dump([instance_dict], f)
             else:
                 json.dump([instance], f)
 
@@ -423,10 +432,10 @@ def initialize_runtime(
         logger.info(action, extra={'msg_type': 'ACTION'})
         obs = runtime.run_action(action)
         logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-        assert_and_raise(
-            obs.exit_code == 0 and 'testbed' in obs.content,
-            f'Expected to find python interpreter from testbed, but got: {str(obs)}',
-        )
+        # assert_and_raise(
+        #     obs.exit_code == 0 and 'testbed' in obs.content,
+        #     f'Expected to find python interpreter from testbed, but got: {str(obs)}',
+        # )
 
     logger.info('-' * 30)
     logger.info('END Runtime Initialization Fn')
@@ -438,7 +447,6 @@ def complete_runtime(
     instance: pd.Series,  # this argument is not required, but it is used to get the workspace_dir_name
 ) -> dict[str, Any]:
     """Complete the runtime for the agent.
-
     This function is called before the runtime is used to run the agent.
     If you need to do something in the sandbox to get the correctness metric after
     the agent has run, modify this function.
@@ -448,48 +456,15 @@ def complete_runtime(
     logger.info('-' * 30)
     obs: CmdOutputObservation
     workspace_dir_name = _get_swebench_workspace_dir_name(instance)
-
     action = CmdRunAction(command=f'cd /workspace/{workspace_dir_name}')
     action.set_hard_timeout(600)
-    logger.info(action, extra={'msg_type': 'ACTION'})
+    logger.info(action)
     obs = runtime.run_action(action)
     logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-
-    if obs.exit_code == -1:
-        # The previous command is still running
-        # We need to kill previous command
-        logger.info('The previous command is still running, trying to kill it...')
-        action = CmdRunAction(command='C-c')
-        obs = runtime.run_action(action)
-        logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-
-        # Then run the command again
-        action = CmdRunAction(command=f'cd /workspace/{workspace_dir_name}')
-        action.set_hard_timeout(600)
-        logger.info(action, extra={'msg_type': 'ACTION'})
-        obs = runtime.run_action(action)
-        logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-
-    if obs.exit_code == -1:
-        # The previous command is still running
-        # We need to kill previous command
-        logger.info('The previous command is still running, trying to ctrl+z it...')
-        action = CmdRunAction(command='C-z')
-        obs = runtime.run_action(action)
-        logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-
-        # Then run the command again
-        action = CmdRunAction(command=f'cd /workspace/{workspace_dir_name}')
-        action.set_hard_timeout(600)
-        logger.info(action, extra={'msg_type': 'ACTION'})
-        obs = runtime.run_action(action)
-        logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-
     assert_and_raise(
         isinstance(obs, CmdOutputObservation) and obs.exit_code == 0,
         f'Failed to cd to /workspace/{workspace_dir_name}: {str(obs)}',
     )
-
     action = CmdRunAction(command='git config --global core.pager ""')
     action.set_hard_timeout(600)
     logger.info(action, extra={'msg_type': 'ACTION'})
@@ -499,33 +474,6 @@ def complete_runtime(
         isinstance(obs, CmdOutputObservation) and obs.exit_code == 0,
         f'Failed to git config --global core.pager "": {str(obs)}',
     )
-
-    # First check for any git repositories in subdirectories
-    action = CmdRunAction(command='find . -type d -name .git -not -path "./.git"')
-    action.set_hard_timeout(600)
-    logger.info(action, extra={'msg_type': 'ACTION'})
-    obs = runtime.run_action(action)
-    logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-    assert_and_raise(
-        isinstance(obs, CmdOutputObservation) and obs.exit_code == 0,
-        f'Failed to find git repositories: {str(obs)}',
-    )
-
-    git_dirs = [p for p in obs.content.strip().split('\n') if p]
-    if git_dirs:
-        # Remove all .git directories in subdirectories
-        for git_dir in git_dirs:
-            action = CmdRunAction(command=f'rm -rf "{git_dir}"')
-            action.set_hard_timeout(600)
-            logger.info(action, extra={'msg_type': 'ACTION'})
-            obs = runtime.run_action(action)
-            logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-            assert_and_raise(
-                isinstance(obs, CmdOutputObservation) and obs.exit_code == 0,
-                f'Failed to remove git directory {git_dir}: {str(obs)}',
-            )
-
-    # add all files
     action = CmdRunAction(command='git add -A')
     action.set_hard_timeout(600)
     logger.info(action, extra={'msg_type': 'ACTION'})
@@ -535,53 +483,21 @@ def complete_runtime(
         isinstance(obs, CmdOutputObservation) and obs.exit_code == 0,
         f'Failed to git add -A: {str(obs)}',
     )
-
-    # Remove binary files from git staging
-    action = CmdRunAction(command=remove_binary_files_from_git())
-    action.set_hard_timeout(600)
-    logger.info(action, extra={'msg_type': 'ACTION'})
-    obs = runtime.run_action(action)
-    logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-    assert_and_raise(
-        isinstance(obs, CmdOutputObservation) and obs.exit_code == 0,
-        f'Failed to remove binary files: {str(obs)}',
-    )
-
     n_retries = 0
     git_patch = None
     while n_retries < 5:
         action = CmdRunAction(
-            command=f'git diff --no-color --cached {instance["base_commit"]} > patch.diff'
+            command=f'git diff --no-color --cached {instance["base_commit"]}',
         )
-        action.set_hard_timeout(max(300 + 100 * n_retries, 600))
+        action.set_hard_timeout( 100 + 10 * n_retries)
         logger.info(action, extra={'msg_type': 'ACTION'})
         obs = runtime.run_action(action)
         logger.info(obs, extra={'msg_type': 'OBSERVATION'})
         n_retries += 1
         if isinstance(obs, CmdOutputObservation):
             if obs.exit_code == 0:
-                # Read the patch file
-                action = FileReadAction(path='patch.diff')
-                action.set_hard_timeout(max(300 + 100 * n_retries, 600))
-                logger.info(action, extra={'msg_type': 'ACTION'})
-                obs = runtime.run_action(action)
-                logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-                if isinstance(obs, FileReadObservation):
-                    git_patch = obs.content
-                    break
-                elif isinstance(obs, ErrorObservation):
-                    # Fall back to cat "patch.diff" to get the patch
-                    assert 'File could not be decoded as utf-8' in obs.content
-                    action = CmdRunAction(command='cat patch.diff')
-                    action.set_hard_timeout(max(300 + 100 * n_retries, 600))
-                    logger.info(action, extra={'msg_type': 'ACTION'})
-                    obs = runtime.run_action(action)
-                    assert isinstance(obs, CmdOutputObservation) and obs.exit_code == 0
-                    logger.info(obs, extra={'msg_type': 'OBSERVATION'})
-                    git_patch = obs.content
-                    break
-                else:
-                    assert_and_raise(False, f'Unexpected observation type: {str(obs)}')
+                git_patch = obs.content.strip()
+                break
             else:
                 logger.info('Failed to get git diff, retrying...')
                 sleep_if_should_continue(10)
@@ -590,12 +506,7 @@ def complete_runtime(
             sleep_if_should_continue(10)
         else:
             assert_and_raise(False, f'Unexpected observation type: {str(obs)}')
-
     assert_and_raise(git_patch is not None, 'Failed to get git diff (None)')
-
-    # Remove binary diffs from the patch
-    git_patch = remove_binary_diffs(git_patch)
-
     logger.info('-' * 30)
     logger.info('END Runtime Completion Fn')
     logger.info('-' * 30)
@@ -748,7 +659,7 @@ if __name__ == '__main__':
 
     # NOTE: It is preferable to load datasets from huggingface datasets and perform post-processing
     # so we don't need to manage file uploading to OpenHands's repo
-    dataset = load_dataset(args.dataset, split=args.split)
+    dataset = load_dataset("json", data_files=args.dataset, split=args.split)
     swe_bench_tests = filter_dataset(dataset.to_pandas(), 'instance_id')
     logger.info(
         f'Loaded dataset {args.dataset} with split {args.split}: {len(swe_bench_tests)} tasks'
