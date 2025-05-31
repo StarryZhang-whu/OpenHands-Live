@@ -345,11 +345,11 @@ class ActionExecutionClient(Runtime):
             raise RuntimeError(f'Failed to update MCP server: {response.text}')
 
         # No API key by default. Child runtime can override this when appropriate
-        updated_mcp_config.sse_servers.append(
-            MCPSSEServerConfig(
-                url=self.action_execution_server_url.rstrip('/') + '/sse', api_key=None
-            )
-        )
+        #updated_mcp_config.sse_servers.append(
+        #    MCPSSEServerConfig(
+        #        url=self.action_execution_server_url.rstrip('/') + '/sse', api_key=None
+        #    )
+        #)
         self.log(
             'debug',
             f'Updated MCP config by adding runtime as another server: {updated_mcp_config}',
