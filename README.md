@@ -23,6 +23,10 @@
 
 ## Run on SWE-Bench-Live
 
+The original repo was run on debian. Debian VM suggested.
+
+Follow Development.md to set up env.
+
 ```shell
 ./evaluation/benchmarks/swe_bench/scripts/run_infer.sh [model_config] [git-version] [agent] [eval_limit] [max_iter] [num_workers] [dataset] [dataset_split]
 
